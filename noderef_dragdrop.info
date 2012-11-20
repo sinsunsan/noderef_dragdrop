@@ -1,0 +1,5 @@
+name = noderef_dragdrop
+description = ""
+core = 6.x
+version = 1.x
+#dependencies[] =

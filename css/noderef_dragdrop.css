@@ -1,0 +1,23 @@
+#list_containing_nodes, #list_container_node{
+float: left;
+width: 48%;
+margin: 3px;
+}
+#display_noderef_dragdrop ul{
+  background: #F9F9F9;
+  height: 400px;
+}
+#display_noderef_dragdrop h2{
+  background: #F6F6F6;
+  padding: 8px;
+}
+#display_noderef_dragdrop li{
+  float: left;
+  clear: both;
+}
+#display_noderef_dragdrop li:hover{
+  cursor: move;
+}
+#display_noderef_dragdrop ul.ui-state-highlight{
+  background: #d6d6d6;
+}

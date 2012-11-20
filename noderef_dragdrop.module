@@ -1,0 +1,367 @@
+<?php
+/**
+ * Implementation of hook_perm().
+ */
+function noderef_dragdrop_perm(){
+  return array(
+      'administer noderef_dragdrop'
+  );
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function noderef_dragdrop_menu() {
+  $items = array();
+
+  $items['admin/settings/noderef_dragdrop'] = array(
+    'page callback' => 'noderef_dragdrop_settings',
+    'access callback' => 'user_access',
+    'access arguments' => array('administer noderef_dragdrop'),
+    'type' => MENU_NORMAL_ITEM,
+    'title' => t('Drag And Drip Displays settings')
+  );
+
+  $items['admin/settings/noderef_dragdrop/%/delete'] = array(
+    'page callback' => 'noderef_dragdrop_delete_display',
+    'page arguments' => array(3),
+    'access callback' => 'user_access',
+    'access arguments' => array('administer noderef_dragdrop'),
+  );
+
+  $items['noderef_dragdrop/ajax'] = array(
+    'page callback' => 'noderef_dragdrop_ajax',
+    'access callback' => 'user_access'
+  );
+
+  $items['noderef_dragdrop/%'] = array(
+    'page callback' => 'noderef_dragdrop_dispaly',
+    'page arguments' => array(1),
+    'access callback' => 'user_access',
+    'access arguments' => array('administer noderef_dragdrop'),
+    'title' => t('Display')
+  );
+
+  $items['admin/settings/noderef_dragdrop/add_display'] = array(
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('noderef_dragdrop_settings_display_form', 'add', ''),
+    'access callback' => 'user_access',
+    'access arguments' => array('administer noderef_dragdrop'),
+    'type' => MENU_NORMAL_ITEM,
+    'title' => t('Add Display'),
+  );
+
+  $items['admin/settings/noderef_dragdrop/%/edit'] = array(
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('noderef_dragdrop_settings_display_form', 'edit', 3),
+    'access callback' => 'user_access',
+    'access arguments' => array('administer noderef_dragdrop'),
+    'type' => MENU_NORMAL_ITEM,
+    'title' => t('Edit Display'),
+  );
+
+  return $items;
+}
+
+/*
+ * Displays page
+ */
+function noderef_dragdrop_dispaly($id_display){
+
+  $displays = unserialize(variable_get('noderef_dragdrop_displays', ""));
+  
+  if (!array_key_exists($id_display, $displays)){
+    drupal_not_found();
+  }
+  
+  $display = $displays[$id_display];
+
+  drupal_add_js($display, 'setting');
+  drupal_add_css(drupal_get_path('module', "noderef_dragdrop") . '/css/noderef_dragdrop.css');
+  jquery_ui_add(array('ui.draggable', 'ui.droppable'));
+  drupal_add_js(drupal_get_path('module', "noderef_dragdrop") . '/js/noderef_dragdrop.js');
+
+  $result = $display;
+  $result['node_type_containing'] = $display['node_type_containing'];
+  
+  $nodes_containing_result = db_query('SELECT * FROM {node} WHERE type = "%s" ', $display['node_type_containing']);
+  while($node = db_fetch_array($nodes_containing_result)){
+    $result['node_containing'][] = $node;
+  }
+
+  $nodes_container_result = db_query('SELECT * FROM {node} WHERE type = "%s" ', $display['node_type_container']);
+  while($node = db_fetch_array($nodes_container_result)){
+    $result['node_type_container_nodes'][] = $node;
+  }
+
+  return theme('theme_lists', array('content' => $result));
+}
+/*
+ * Perform ajax call
+ */
+function noderef_dragdrop_ajax(){
+  $post = $_POST;
+
+  switch ($post['action']) {
+    case 'containing_to_containner':
+      $OK = !empty ($post['nid_container']);
+      $OK &= !empty ($post['nid_containing']);
+      $OK &= !empty ($post['field_machine']);
+
+      if (!$OK){
+        print "error";
+        exit;
+      }
+
+      $node_containner = $post['nid_container'];
+      $nid_containing = node_load($post['nid_containing']);
+      $field_machine = $post['field_machine'];
+
+      $nid_containing->$field_machine = array(0 => array('nid' => $node_containner));
+
+      node_save($nid_containing);
+
+      break;
+    case 'get_containing_nodes':
+
+      $left_list = array();
+      $right_list = array();
+      
+      $OK = !empty ($post['nid_container']);
+      $OK &= !empty ($post['node_type_containing']);
+      $OK &= !empty ($post['field_machine']);
+
+      if (!$OK){
+        print "error";
+        exit;
+      }
+
+      $sql = 'SELECT * FROM content_type_%s ctx, node n WHERE ctx.nid = n.nid' ;
+      $result = db_query($sql, $post['node_type_containing']);
+
+
+      while ($row = db_fetch_array($result)) {
+        if ($row[$post['field_machine'] . '_nid'] == $post['nid_container']){
+          $right_list[] = array('title' => $row['title'], 'nid' => $row['nid']);
+        }else{
+          $left_list[] = array('title' => $row['title'], 'nid' => $row['nid']);
+        }
+      }
+      print json_encode(array(
+        'left_list' => $left_list,
+        'right_list' => $right_list
+      ));
+ 
+    default:
+      break;
+  }
+
+  exit;
+}
+
+function noderef_dragdrop_delete_display($id_display){
+  $displays = unserialize(variable_get('noderef_dragdrop_displays', ""));
+  unset ($displays[$id_display]);
+  variable_set('noderef_dragdrop_displays', serialize($displays));
+  drupal_goto('admin/settings/noderef_dragdrop');
+}
+
+function noderef_dragdrop_settings(){
+  return drupal_get_form('noderef_dragdrop_settings_form');
+}
+
+function noderef_dragdrop_settings_form(){
+
+  $displays = unserialize(variable_get('noderef_dragdrop_displays', ''));
+  foreach ($displays as $key => $display ) {
+    $form['noderef_dragdrop'][$key] = array(
+      'node_type_containing' => array('#value' => t($display['node_type_containing'])),
+      'node_type_container' => array('#value' => t($display['node_type_container'])),
+      'field_machine_name' => array('#value' => t($display['field_machine_name'])),
+      'css_selector_draggable' => array('#value' => t($display['css_selector_draggable'])),
+      'css_selector_droppable' => array('#value' => t($display['css_selector_droppable'])),
+      'operations' => array('#value' => theme_links(array(
+        array(
+          'title' => 'Edit',
+          'href' => 'admin/settings/noderef_dragdrop/' . $key . '/edit'),
+        array(
+          'title' => 'Delete',
+          'href' => 'admin/settings/noderef_dragdrop/' . $key . '/delete'),
+        array(
+          'title' => 'View',
+          'href' => 'noderef_dragdrop/' . $key
+        )
+         ))));
+    }
+
+  $form['add_display'] = array(
+      '#type' => 'submit',
+      '#value' => t('Add Display')
+  );
+  $form['#theme'] = 'noderef_dragdrop_settings_form_table';
+  
+  return $form;
+}
+
+function noderef_dragdrop_settings_form_submit($form, $form_state){
+  drupal_goto('admin/settings/noderef_dragdrop/add_display');
+}
+
+function theme_noderef_dragdrop_settings_form_table($form){
+  $header = array(
+      'Containing node type',
+      'Container node type',
+      'Field machine name',
+      'CSS draggable',
+      'CSS droppable',
+      'Operations');
+  foreach(element_children($form['noderef_dragdrop']) as $key){
+    $rows[] = array(
+        drupal_render($form['noderef_dragdrop'][$key]['node_type_containing']),
+        drupal_render($form['noderef_dragdrop'][$key]['node_type_container']),
+        drupal_render($form['noderef_dragdrop'][$key]['field_machine_name']),
+        drupal_render($form['noderef_dragdrop'][$key]['css_selector_draggable']),
+        drupal_render($form['noderef_dragdrop'][$key]['css_selector_droppable']),
+        drupal_render($form['noderef_dragdrop'][$key]['operations']),
+       );
+  }
+  unset($form['noderef_dragdrop']);
+  $output = theme_table($header, $rows);
+  $output.= drupal_render($form['add_display']);
+  $output .= drupal_render($form);
+  return $output;
+
+}
+
+function noderef_dragdrop_theme(){
+  return array(
+    'noderef_dragdrop_settings_form_table' => array(
+      'arguments' => array('form' => array())
+    ),
+    'theme_lists' => array(
+      'arguments' => array('content' => NULL),
+      'template'=> 'theme/theme_lists'
+    ),
+  );
+  return $theme;
+}
+
+function noderef_dragdrop_settings_display_form($form, $operation, $id_display){
+  $form = array();
+  
+  $default_value = array(
+    'node_type_containing' => '',
+    'node_type_container' => '',
+    'field_machine_name' => '',
+    'css_selector_draggable' => '',
+    'css_selector_droppable' => '',
+  );
+
+  if ($operation == 'edit'){
+
+    $displays = unserialize(variable_get('noderef_dragdrop_displays', ""));
+
+    if (!array_key_exists($id_display, $displays)){
+      drupal_not_found();
+    }
+    
+    $default_value = array(
+      'node_type_containing' =>  $displays[$id_display]['css_selector_droppable'],
+      'node_type_container' => $displays[$id_display]['node_type_container'],
+      'field_machine_name' => $displays[$id_display]['field_machine_name'],
+      'css_selector_draggable' => $displays[$id_display]['css_selector_draggable'],
+      'css_selector_droppable' => $displays[$id_display]['css_selector_droppable'],
+      'display_machine_name' => $displays[$id_display]['display_machine_name'],
+    );
+
+    $form['id_display'] = array(
+      '#type' => 'hidden',
+      '#value' => $id_display
+    );
+  }
+
+  $result = db_query('SELECT cnf.field_name, cnf.global_settings, cnfi.type_name FROM  content_node_field cnf, content_node_field_instance cnfi WHERE cnf.module = "nodereference" AND cnf.field_name = cnfi.field_name');
+  $field_machine_name = array();
+  $node_type = array();
+
+  while ($row = db_fetch_array($result)) {
+    $global_settings = unserialize($row['global_settings']);
+
+    foreach ($global_settings['referenceable_types'] as $value) {
+      if ($value !== 0){
+        $node_type[$value] = $value;
+      }
+    }
+    
+    $field_machine_name[$row['field_name']] =  $row['field_name'];
+  }
+
+  $form['operation'] = array(
+    '#type' => 'hidden',
+    '#value' => $operation
+  );
+
+  $form['display_machine_name'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Machine name of dispaly'),
+      '#default_value' => $default_value['display_machine_name']
+  );
+
+  $form['node_type_containing'] = array(
+      '#type' => 'select',
+      '#options' => $node_type,
+      '#title' => t('Name of the containing node type')
+  );
+
+  $form['node_type_container'] = array(
+      '#type' => 'select',
+      '#options' => $node_type,
+      '#title' => t('Name of the container node type'),
+      '#default_value' => $default_value['node_type_container']
+  );
+
+  $form['field_machine_name'] = array(
+      '#type' => 'select',
+      '#options' => $field_machine_name,
+      '#title' => t('Field machine name'),
+      '#default_value' => $default_value['field_machine_name']
+  );
+
+  $form['css_selector_draggable'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Css selector of draggable element'),
+      '#default_value' => $default_value['css_selector_draggable']
+  );
+
+  $form['css_selector_droppable'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Css selector of droppable element'),
+      '#default_value' => $default_value['css_selector_droppable']
+  );
+
+
+  $form['submit'] = array(
+      '#type' => 'submit',
+      '#value' => 'Submit'
+  );
+  $form['#redirect'] = 'admin/settings/noderef_dragdrop';
+  return $form;
+}
+
+function noderef_dragdrop_settings_display_form_submit($form, $form_state){
+  $displays = unserialize(variable_get('noderef_dragdrop_displays', ""));
+  $new_display = array(
+      'node_type_containing' => $form_state['values']['node_type_containing'],
+      'node_type_container' => $form_state['values']['node_type_container'],
+      'field_machine_name' => $form_state['values']['field_machine_name'],
+      'css_selector_draggable' => $form_state['values']['css_selector_draggable'],
+      'css_selector_droppable' => $form_state['values']['css_selector_droppable'],
+      'display_machine_name' => $form_state['values']['display_machine_name'],
+  );
+  if ($form_state['values']['operation'] == 'add'){
+    $displays[$new_display['display_machine_name']] = $new_display;
+  }else if($form_state['values']['operation'] == 'edit'){
+    $displays[$form_state['values']['id_display']] = $new_display;
+  }
+  variable_set('noderef_dragdrop_displays', serialize($displays));
+}
