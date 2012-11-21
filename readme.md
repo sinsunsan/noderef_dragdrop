@@ -1,11 +1,13 @@
 The module should be compatible with the latest drupal 6 version, 
 and should have an admin page where it's possible to set the drag and drop settings.
 
-You have two content type let's say "images" and "projects". 
-The image node have a node reference field (field_image_project ) pointing to a project node. 
-It's a image of a given (architectural) project. 
+Let's take an example : 
 
-So I want to make a display, with two views side to side. 
+You have two content types "images" and "projects". 
+The images nodes have a node reference field (field_image_project ) pointing to a projects nodes. 
+It's a image of a given project. 
+
+I have a display with two views side to side. 
 The first view is a list of images node, the second view is a list of selected project node. 
 I want people can drag images (left side) on project view (right side). 
 This drag and drop should use jquery ui draggable javascript, and when dropped trigger an ajax call, that load the image node (the image that was dragged) and fill the field_image_project node reference field, with the value of the project nid (the project on which the image was dropped). 
