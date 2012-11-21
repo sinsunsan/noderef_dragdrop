@@ -17,7 +17,7 @@ This drag and drop should use jquery ui draggable javascript.
 * When dropped trigger an ajax call, that load the image node (the image that was dragged)
 * fill the field_image_project node reference field, with the value of the project nid (the project on which the image was dropped). 
 
-The field_image_project should be compatible with noderefcreate module. T
+The field_image_project should be compatible with noderefcreate module. 
 The project's node will always exist in this case (as it is shown in the view), 
 but per aps there is compatibility issue with the noderefcreate widget. 
 
